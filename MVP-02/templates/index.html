@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>MVP-02 · US Passport Photo Tool</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="card">
+    <h1>US Passport Photo · 自动处理</h1>
+    <p>上传正面人像照片，自动去背景→白底→裁剪到 1200×1200 px。</p>
+
+    <form action="/process" method="post" enctype="multipart/form-data">
+      <input type="file" name="photo" accept="image/*" required />
+      <button type="submit">开始处理</button>
+    </form>
+
+    <details>
+      <summary>注意事项（展开）</summary>
+      <ul>
+        <li>请使用正面人像，无遮挡、光线均匀。</li>
+        <li>原型工具，结果需人工复核。</li>
+      </ul>
+    </details>
+  </div>
+</body>
+</html>
