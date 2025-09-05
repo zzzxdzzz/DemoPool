@@ -1,0 +1,88 @@
+\
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Review Events</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 1rem; }
+    table { border-collapse: collapse; width: 100%; max-width: 980px; }
+    th, td { border: 1px solid #ddd; padding: .5rem; }
+    th { background: #f6f6f6; text-align: left; }
+    input { width: 100%; box-sizing: border-box; padding: .35rem .45rem; }
+    button { padding: .6rem 1rem; border: none; border-radius: 8px; background: #0d6efd; color: #fff; cursor: pointer; }
+    .row-actions { display: flex; gap: .5rem; }
+  </style>
+</head>
+<body>
+  <h2>Review & Edit Events (TZ: {{ timezone }})</h2>
+  <form method="post">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Date (YYYY-MM-DD)</th>
+          <th>Start (HH:MM)</th>
+          <th>End (HH:MM)</th>
+          <th>Location</th>
+          <th>Notes</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="body">
+        {% for e in events %}
+        <tr>
+          <td><input name="rows[{{ loop.index0 }}][title]" value="{{ e.title|e }}"></td>
+          <td><input name="rows[{{ loop.index0 }}][date]" value="{{ e.date|e }}"></td>
+          <td><input name="rows[{{ loop.index0 }}][start_time]" value="{{ e.start_time|e }}"></td>
+          <td><input name="rows[{{ loop.index0 }}][end_time]" value="{{ e.end_time|e }}"></td>
+          <td><input name="rows[{{ loop.index0 }}][location]" value="{{ e.location|default('', true)|e }}"></td>
+          <td><input name="rows[{{ loop.index0 }}][notes]" value="{{ e.notes|default('', true)|e }}"></td>
+          <td class="row-actions"><button type="button" onclick="removeRow(this)">✕</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <input type="hidden" name="row_count" id="row_count" value="{{ events|length }}">
+    <p style="margin-top: .75rem;">
+      <button type="button" onclick="addRow()">+ Add Row</button>
+      <button type="submit">Save</button>
+      <a href="{{ url_for('download', image_id=image_id) }}"><button type="button">Download .ics</button></a>
+    </p>
+  </form>
+
+  <script>
+    function addRow() {
+      const body = document.getElementById('body');
+      const idx = body.children.length;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input name="rows[${idx}][title]" value="Rehearsal"></td>
+        <td><input name="rows[${idx}][date]" placeholder="YYYY-MM-DD"></td>
+        <td><input name="rows[${idx}][start_time]" placeholder="18:30"></td>
+        <td><input name="rows[${idx}][end_time]" placeholder="20:00"></td>
+        <td><input name="rows[${idx}][location]" ></td>
+        <td><input name="rows[${idx}][notes]" ></td>
+        <td class="row-actions"><button type="button" onclick="removeRow(this)">✕</button></td>
+      `;
+      body.appendChild(tr);
+      document.getElementById('row_count').value = body.children.length;
+    }
+    function removeRow(btn) {
+      const tr = btn.closest('tr');
+      tr.remove();
+      const body = document.getElementById('body');
+      // Reindex
+      [...body.children].forEach((row, i) => {
+        row.querySelectorAll('input').forEach(input => {
+          input.name = input.name.replace(/rows\[\d+\]/, `rows[${i}]`);
+        });
+      });
+      document.getElementById('row_count').value = body.children.length;
+    }
+    // Ensure row_count is correct on load
+    document.getElementById('row_count').value = document.getElementById('body').children.length;
+  </script>
+</body>
+</html>

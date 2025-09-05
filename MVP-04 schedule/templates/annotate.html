@@ -1,0 +1,128 @@
+\
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Annotate</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 1rem; }
+    .tools { display: flex; gap: .5rem; align-items: center; margin-bottom: .75rem; }
+    canvas { border: 1px solid #ddd; border-radius: 10px; max-width: 100%; height: auto; }
+    button, input[type=range] { height: 36px; }
+    button { padding: .4rem .8rem; border: none; border-radius: 8px; background: #0d6efd; color: #fff; cursor: pointer; }
+    button.secondary { background: #6c757d; }
+    button.warn { background: #dc3545; }
+  </style>
+</head>
+<body>
+  <div class="tools">
+    <button id="brush">Brush</button>
+    <button id="eraser" class="secondary">Eraser</button>
+    <label>Size <input id="size" type="range" min="5" max="80" step="1" value="22"></label>
+    <button id="clear" class="warn">Clear</button>
+    <button id="submit">Submit Selection</button>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <script>
+    const imageUrl = "{{ image_url }}";
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Overlay for drawing (same canvas using composite operations)
+    let drawing = false;
+    let mode = 'brush'; // or 'eraser'
+    let size = 22;
+
+    document.getElementById('brush').onclick = () => mode = 'brush';
+    document.getElementById('eraser').onclick = () => mode = 'eraser';
+    document.getElementById('size').oninput = (e) => size = parseInt(e.target.value, 10);
+
+    document.getElementById('clear').onclick = () => {
+      drawBackground();
+      // clear strokes layer by redrawing background only
+    };
+
+    function drawBackground() {
+      canvas.width = image.width;
+      canvas.height = image.height;
+      ctx.clearRect(0,0,canvas.width, canvas.height);
+      ctx.drawImage(image, 0, 0);
+    }
+
+    function drawDot(x, y) {
+      ctx.save();
+      ctx.globalCompositeOperation = (mode === 'brush') ? 'source-over' : 'destination-out';
+      ctx.beginPath();
+      ctx.arc(x, y, size/2, 0, 2*Math.PI);
+      ctx.fillStyle = (mode === 'brush') ? 'rgba(0, 255, 0, 0.55)' : 'rgba(0,0,0,1)';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+      drawing = true;
+      const rect = canvas.getBoundingClientRect();
+      drawDot(e.clientX - rect.left, e.clientY - rect.top);
+    });
+    canvas.addEventListener('mousemove', (e) => {
+      if (!drawing) return;
+      const rect = canvas.getBoundingClientRect();
+      drawDot(e.clientX - rect.left, e.clientY - rect.top);
+    });
+    document.addEventListener('mouseup', () => drawing = false);
+
+    // Submit mask: create a binary mask image based on green overlay
+    document.getElementById('submit').onclick = async () => {
+      // Build a mask where painted (green) pixels -> white (255), elsewhere black (0)
+      const tmp = document.createElement('canvas');
+      tmp.width = canvas.width;
+      tmp.height = canvas.height;
+      const tctx = tmp.getContext('2d');
+
+      // Rebuild mask by comparing original to current canvas: we painted semi-transparent green
+      // Strategy: draw current canvas to tmp, extract alpha channel: non-zero alpha -> mask
+      tctx.drawImage(canvas, 0, 0);
+      const imgData = tctx.getImageData(0, 0, tmp.width, tmp.height);
+      const data = imgData.data;
+      // Create stark mask: any pixel with green overlay added increases G channel significantly.
+      // Simpler: produce alpha=255 for any pixel where green channel > red+20 (heuristic)
+      for (let i=0; i<data.length; i+=4) {
+        const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+        const painted = (g > r + 20) && (g > b + 20);
+        if (painted) {
+          data[i] = 255; data[i+1] = 255; data[i+2] = 255; data[i+3] = 255;
+        } else {
+          data[i] = 0; data[i+1] = 0; data[i+2] = 0; data[i+3] = 255;
+        }
+      }
+      tctx.putImageData(imgData, 0, 0);
+      const maskDataUrl = tmp.toDataURL('image/png');
+
+      const res = await fetch("{{ url_for('submit_mask', image_id=image_id) }}", {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mask: maskDataUrl})
+      });
+      const js = await res.json();
+      if (js.ok) {
+        // Redirect to extraction
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = "{{ url_for('extract', image_id=image_id) }}";
+        document.body.appendChild(form);
+        form.submit();
+      } else {
+        alert(js.error || 'Failed to submit mask');
+      }
+    };
+
+    image.onload = () => { drawBackground(); };
+    image.src = imageUrl;
+  </script>
+</body>
+</html>
