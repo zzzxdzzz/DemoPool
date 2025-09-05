@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MVP‑03 · 企鹅打字躲熊猫（Web）</title>
+  <style>
+    :root {
+      --bg1: #f7fbff;
+      --bg2: #e7f3ff;
+      --ink: #1c1c1c;
+      --accent: #3b82f6;
+      --paper: #ffffff;
+      --good: #16a34a;
+      --bad: #ef4444;
+      --cute1: #9bd3ff;
+      --cute2: #ffd1dc;
+    }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: radial-gradient(1200px 800px at 20% 10%, var(--bg2), transparent),
+                  radial-gradient(900px 700px at 80% 0%, #fff0f5, transparent),
+                  linear-gradient(180deg, var(--bg1), #fefefe);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans CJK SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      overflow: hidden;
+    }
+    .wrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      image-rendering: optimizeQuality;
+      filter: saturate(1.05);
+    }
+    .hud {
+      position: absolute;
+      left: 16px;
+      top: 12px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(6px);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.08);
+      font-weight: 600;
+    }
+    .hud .row { display: flex; align-items: center; gap: 10px; }
+    .chip {
+      display: inline-block; padding: 4px 10px; border-radius: 999px;
+      background: #ffffffcc; border: 1px solid #00000010; font-weight: 700;
+    }
+    .letters { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .letters .L { min-width: 28px; text-align: center; padding: 4px 8px; border-radius: 8px; font-weight: 800; }
+    .letters .need { background: #e6f4ff; border: 1px dashed #93c5fd; }
+    .letters .ok   { background: #eafff2; border: 1px dashed #86efac; }
+
+    .overlay {
+      position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
+    }
+    .card {
+      pointer-events: auto;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(10px);
+      border-radius: 18px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.12);
+      padding: 20px 22px; width: min(560px, 92vw);
+      text-align: center;
+    }
+    h1 { margin: 6px 0 4px; font-size: 24px; }
+    p { margin: 6px 0; opacity: .85; }
+    .kbd { display: inline-block; padding: 2px 8px; border-radius: 8px; background: #fff; border: 1px solid #e5e7eb; font-weight: 700; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      margin-top: 10px; padding: 10px 16px; border-radius: 12px; border: 0;
+      background: var(--accent); color:#fff; font-weight: 800; cursor: pointer;
+      box-shadow: 0 8px 24px rgba(59,130,246,.35);
+    }
+    .btn:hover { filter: brightness(1.05); }
+    .hide { display: none; }
+
+    .toast {
+      position: absolute; left:50%; transform: translateX(-50%);
+      bottom: 18px; padding: 8px 12px; border-radius: 10px;
+      background: rgba(0,0,0,.6); color: #fff; font-weight: 700;
+      opacity: 0; transition: opacity .25s ease;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <canvas id="game"></canvas>
+
+    <div class="hud" id="hud">
+      <div class="row" style="gap:12px">
+        <span class="chip">分数 <span id="score">0</span></span>
+        <span class="chip">连击 <span id="combo">0</span></span>
+        <span class="chip">生命 <span id="lives">3</span></span>
+      </div>
+      <div class="letters" id="queue"></div>
+    </div>
+
+    <div class="overlay" id="overlay">
+      <div class="card">
+        <h1>🐧 企鹅打字躲熊猫 · 水彩风</h1>
+        <p>规则：屏幕右侧会出现 <b>熊猫</b> 挡路，它胸前有字母。<br/>敲击相同字母可让熊猫“咕噜”成球飞走，帮助 🐧 继续前进！</p>
+        <p>练习字母：<span class="kbd">A S D F G H J K L</span>（不区分大小写）</p>
+        <button class="btn" id="startBtn">开始游戏</button>
+        <p style="margin-top:10px; font-size:12px; opacity:.7">提示：按 <span class="kbd">R</span> 重开，<span class="kbd">M</span> 切换音乐（占位），<span class="kbd">P</span> 暂停/继续。</p>
+      </div>
+    </div>
+
+    <div class="toast" id="toast">Nice!</div>
+  </div>
+
+  <script>
+    // ====== 基本设置 ======
+    const lettersHome = ['a','s','d','f','g','h','j','k','l'];
+    const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const hudScore = document.getElementById('score');
+    const hudCombo = document.getElementById('combo');
+    const hudLives = document.getElementById('lives');
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('startBtn');
+    const queueEl = document.getElementById('queue');
+    const toast = document.getElementById('toast');
+
+    let W = 0, H = 0;
+    function resize() {
+      W = Math.floor(window.innerWidth);
+      H = Math.floor(window.innerHeight);
+      canvas.width = Math.floor(W * DPR);
+      canvas.height = Math.floor(H * DPR);
+      canvas.style.width = W + 'px';
+      canvas.style.height = H + 'px';
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // ====== 简易随机 & 噪声纹理（营造纸张水彩感） ======
+    const noiseCanvas = document.createElement('canvas');
+    const nctx = noiseCanvas.getContext('2d');
+    function buildNoise() {
+      noiseCanvas.width = 300;
+      noiseCanvas.height = 200;
+      const img = nctx.createImageData(noiseCanvas.width, noiseCanvas.height);
+      for (let i=0; i<img.data.length; i+=4) {
+        const v = 235 + Math.random()*20; // 亮一点
+        img.data[i] = img.data[i+1] = img.data[i+2] = v;
+        img.data[i+3] = 20; // 透明度
+      }
+      nctx.putImageData(img, 0, 0);
+    }
+    buildNoise();
+
+    function drawPaper() {
+      const w = noiseCanvas.width, h = noiseCanvas.height;
+      const cols = Math.ceil(W / w), rows = Math.ceil(H / h);
+      ctx.save();
+      ctx.globalAlpha = 0.25; // 轻微纸纹
+      for (let y=0;y<rows;y++) {
+        for (let x=0;x<cols;x++) ctx.drawImage(noiseCanvas, x*w, y*h);
+      }
+      ctx.restore();
+    }
+
+    // ====== 实体定义 ======
+    class Penguin {
+      constructor(){
+        this.x = 120; this.y = H*0.65; this.scale = 1;
+        this.bobT = 0; // 上下轻微浮动
+      }
+      update(dt){
+        this.bobT += dt;
+      }
+      draw(){ drawPenguin(ctx, this.x, this.y + Math.sin(this.bobT*2)*4, 1.0); }
+    }
+
+    class Panda {
+      constructor(letter){
+        this.letter = letter;
+        this.x = W + 120 + Math.random()*80;
+        this.y = H*0.65 + (Math.random()*16 - 8);
+        this.vx = - (2.6 + Math.random()*1.2);
+        this.state = 'walk'; // walk | roll
+        this.scale = 1.0;
+        this.rot = 0; // for roll
+        this.vy = 0; this.rv = 0; // for roll
+        this.dead = false;
+        this.hitFlash = 0;
+      }
+      hit(){
+        if (this.state !== 'walk') return;
+        this.state = 'roll';
+        this.vx = 3.2 + Math.random()*1.5;
+        this.vy = -6.0 - Math.random()*1.5;
+        this.rv = 0.3 + Math.random()*0.25;
+        this.hitFlash = 0.35;
+      }
+      update(dt){
+        if (this.state === 'walk') {
+          this.x += this.vx;
+        } else {
+          // rolling ball physics
+          this.x += this.vx;
+          this.y += this.vy;
+          this.vy += 16 * dt; // gravity ~ 16 px/s^2
+          this.rot += this.rv;
+          this.rv *= 0.995;
+        }
+        if (this.hitFlash>0) this.hitFlash -= dt;
+        if (this.x < -180 || this.y < -180 || this.x > W+220 || this.y > H+220) this.dead = true;
+      }
+      draw(){
+        if (this.state === 'walk') drawPandaStanding(ctx, this.x, this.y, 1.0, this.letter, this.hitFlash);
+        else drawPandaRolling(ctx, this.x, this.y, 1.0, this.rot);
+      }
+      collides(penguin){
+        if (this.state !== 'walk') return false;
+        const dx = (this.x - penguin.x), dy = (this.y - penguin.y);
+        const dist = Math.hypot(dx, dy);
+        return dist < 80; // 简易圆形碰撞
+      }
+    }
+
+    // ====== 绘制：水彩风的企鹅与熊猫 ======
+    function withShadow(shadowColor, blur, drawFn){
+      ctx.save();
+      ctx.shadowColor = shadowColor; ctx.shadowBlur = blur; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+      drawFn();
+      ctx.restore();
+    }
+
+    function drawPenguin(ctx, x, y, s){
+      ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+      // 身体椭圆 + 柔和渐变
+      const bodyGrad = ctx.createRadialGradient(0,-10,10, 0,0,80);
+      bodyGrad.addColorStop(0, '#bfe6ff');
+      bodyGrad.addColorStop(1, '#5aa9e6');
+      withShadow('rgba(0,0,0,.15)', 12, () => {
+        ctx.beginPath(); ctx.ellipse(0, 0, 60, 75, 0, 0, Math.PI*2); ctx.fillStyle = bodyGrad; ctx.fill();
+      });
+      // 肚皮
+      ctx.beginPath(); ctx.ellipse(0, 15, 42, 50, 0, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
+      // 脸颊
+      ctx.fillStyle = 'rgba(255,160,170,0.35)';
+      ctx.beginPath(); ctx.ellipse(-25, -5, 12, 9, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(25, -5, 12, 9, 0, 0, Math.PI*2); ctx.fill();
+      // 眼睛
+      ctx.fillStyle = '#222';
+      ctx.beginPath(); ctx.ellipse(-18, -15, 6, 7, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(18, -15, 6, 7, 0, 0, Math.PI*2); ctx.fill();
+      // 嘴喙
+      ctx.beginPath(); ctx.moveTo(0,-2); ctx.quadraticCurveTo(10,10, 0,12); ctx.quadraticCurveTo(-10,10, 0,-2);
+      ctx.fillStyle = '#f4a460'; ctx.fill();
+      // 小翅膀
+      ctx.fillStyle = 'rgba(70,130,180,0.9)';
+      ctx.beginPath(); ctx.ellipse(-55, 5, 14, 26, -0.6, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(55, 5, 14, 26, 0.6, 0, Math.PI*2); ctx.fill();
+      // 脚
+      ctx.fillStyle = '#f4a460';
+      ctx.beginPath(); ctx.ellipse(-22, 58, 16, 8, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(22, 58, 16, 8, 0, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+
+    function drawPandaStanding(ctx, x, y, s, letter, flash=0){
+      ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+      // 身体
+      const bodyGrad = ctx.createRadialGradient(0,-5,10, 0,0,80);
+      bodyGrad.addColorStop(0, '#ffffff');
+      bodyGrad.addColorStop(1, '#f2f2f2');
+      withShadow('rgba(0,0,0,.12)', 10, () => {
+        ctx.beginPath(); ctx.ellipse(0, 0, 60, 75, 0, 0, Math.PI*2); ctx.fillStyle = bodyGrad; ctx.fill();
+      });
+      // 耳朵
+      ctx.fillStyle = '#222';
+      ctx.beginPath(); ctx.ellipse(-34, -62, 16, 14, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(34, -62, 16, 14, 0, 0, Math.PI*2); ctx.fill();
+      // 眼圈
+      ctx.beginPath(); ctx.ellipse(-20, -22, 14, 18, -0.2, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(20, -22, 14, 18, 0.2, 0, Math.PI*2); ctx.fill();
+      // 眼睛
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.ellipse(-20, -22, 6.5, 7, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(20, -22, 6.5, 7, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#222';
+      ctx.beginPath(); ctx.arc(-20, -22, 3, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(20, -22, 3, 0, Math.PI*2); ctx.fill();
+      // 鼻口
+      ctx.fillStyle = '#222';
+      ctx.beginPath(); ctx.arc(0, -8, 4, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(0,-6); ctx.quadraticCurveTo(0,0, -8,2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,-6); ctx.quadraticCurveTo(0,0, 8,2); ctx.stroke();
+      // 手臂
+      ctx.fillStyle = '#222';
+      ctx.beginPath(); ctx.ellipse(-48, -10, 14, 22, -0.4, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(48, -10, 14, 22, 0.4, 0, Math.PI*2); ctx.fill();
+      // 字母牌（胸口）
+      const badgeW=44, badgeH=36;
+      ctx.fillStyle = flash>0? `rgba(22,163,74,${0.18+flash})` : 'rgba(180,220,255,0.55)';
+      ctx.strokeStyle = 'rgba(100,140,220,0.6)'; ctx.lineWidth=2;
+      roundRect(ctx, -badgeW/2, -6, badgeW, badgeH, 10, true, true);
+      ctx.fillStyle = '#1f2937';
+      ctx.font = 'bold 26px ui-sans-serif, system-ui';
+      ctx.textAlign = 'center'; ctx.textBaseline='middle';
+      ctx.fillText(letter.toUpperCase(), 0, badgeH/2 - 6);
+      ctx.restore();
+    }
+
+    function drawPandaRolling(ctx, x, y, s, rot){
+      ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s, s);
+      // 滚动球：黑白补丁
+      withShadow('rgba(0,0,0,.12)', 8, () => {
+        ctx.beginPath(); ctx.arc(0,0, 52, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
+      });
+      ctx.fillStyle = '#222';
+      ctx.beginPath(); ctx.arc(-20,-8, 16, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(18,10, 14, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-5,22, 10, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+
+    function roundRect(ctx, x, y, w, h, r, fill, stroke) {
+      if (typeof r === 'number') r = {tl:r, tr:r, br:r, bl:r};
+      ctx.beginPath();
+      ctx.moveTo(x + r.tl, y);
+      ctx.lineTo(x + w - r.tr, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+      ctx.lineTo(x + w, y + h - r.br);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+      ctx.lineTo(x + r.bl, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+      ctx.lineTo(x, y + r.tl);
+      ctx.quadraticCurveTo(x, y, x + r.tl, y);
+      ctx.closePath();
+      if (fill) ctx.fill();
+      if (stroke) ctx.stroke();
+    }
+
+    // ====== 游戏状态 ======
+    const state = {
+      penguin: new Penguin(),
+      pandas: [],
+      score: 0,
+      combo: 0,
+      lives: 3,
+      t: 0,
+      spawnTimer: 0,
+      spawnInterval: 1.2, // 初始每 1.2s 来一只
+      running: false,
+      paused: false,
+    };
+
+    function resetGame(){
+      state.penguin = new Penguin();
+      state.pandas = [];
+      state.score = 0; state.combo = 0; state.lives = 3;
+      state.t = 0; state.spawnTimer = 0; state.spawnInterval = 1.2;
+      state.running = true; state.paused = false;
+      overlay.classList.add('hide');
+      updateHUD();
+    }
+
+    function gameOver(){
+      state.running = false;
+      overlay.querySelector('h1').innerText = '游戏结束';
+      overlay.querySelector('p').innerHTML = `你的分数：<b>${state.score}</b><br/>按 <span class="kbd">R</span> 重开，或点击下方按钮。`;
+      overlay.classList.remove('hide');
+    }
+
+    function updateHUD(){
+      hudScore.textContent = state.score;
+      hudCombo.textContent = state.combo;
+      hudLives.textContent = state.lives;
+      // 队列预览（最近的 8 只）
+      queueEl.innerHTML = '';
+      const next = state.pandas.filter(p => p.state==='walk').slice(0,8);
+      next.forEach((p, i) => {
+        const span = document.createElement('span');
+        span.className = 'L ' + (i===0?'need':'ok');
+        span.textContent = p.letter.toUpperCase();
+        queueEl.appendChild(span);
+      });
+    }
+
+    function spawnPanda(){
+      const letter = lettersHome[Math.floor(Math.random()*lettersHome.length)];
+      state.pandas.push(new Panda(letter));
+      // 缓慢提速
+      state.spawnInterval = Math.max(0.65, state.spawnInterval * 0.997);
+    }
+
+    // ====== 输入处理 ======
+    window.addEventListener('keydown', (e) => {
+      if (!state.running) {
+        if (e.key === 'r' || e.key === 'R') { resetGame(); }
+        return;
+      }
+      if (e.key === 'p' || e.key === 'P') { state.paused = !state.paused; return; }
+      if (state.paused) return;
+
+      const k = e.key.toLowerCase();
+      if (!lettersHome.includes(k)) return;
+
+      // 找到最靠前（x 最小）的、处于 walk 的对应字母熊猫
+      let targetIdx = -1, bestX = Infinity;
+      for (let i=0;i<state.pandas.length;i++){
+        const p = state.pandas[i];
+        if (p.state==='walk' && p.letter===k && p.x < bestX) {
+          bestX = p.x; targetIdx = i;
+        }
+      }
+
+      if (targetIdx>=0) {
+        const p = state.pandas[targetIdx];
+        p.hit();
+        state.score += 10 + Math.floor(state.combo*0.5);
+        state.combo = Math.min(999, state.combo + 1);
+        flickerToast('Nice! +' + (10 + Math.floor((state.combo-1)*0.5)));
+      } else {
+        // 按错：扣连击，轻微惩罚
+        state.combo = 0;
+        flickerToast('Oops', true);
+      }
+      updateHUD();
+    });
+
+    function flickerToast(text, bad=false){
+      toast.textContent = text;
+      toast.style.background = bad? 'rgba(239,68,68,.85)' : 'rgba(34,197,94,.85)';
+      toast.classList.add('show');
+      clearTimeout(flickerToast._t);
+      flickerToast._t = setTimeout(() => toast.classList.remove('show'), 450);
+    }
+
+    // ====== 主循环 ======
+    let last = performance.now();
+    function loop(now){
+      const dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+
+      ctx.clearRect(0,0,W,H);
+      drawPaper();
+
+      if (state.running && !state.paused) {
+        state.t += dt;
+        state.spawnTimer += dt;
+        if (state.spawnTimer >= state.spawnInterval) {
+          state.spawnTimer = 0; spawnPanda(); updateHUD();
+        }
+        state.penguin.update(dt);
+        for (const p of state.pandas) p.update(dt);
+
+        // 碰撞检测（walk 状态）
+        for (const p of state.pandas) {
+          if (p.collides(state.penguin)) {
+            p.state = 'roll'; p.vx = 2.8; p.vy = -5; p.rv = 0.3; // 被撞也滚走
+            state.lives -= 1; state.combo = 0; updateHUD();
+            flickerToast('-1 生命', true);
+            if (state.lives <= 0) { gameOver(); }
+          }
+        }
+        // 清理
+        state.pandas = state.pandas.filter(p => !p.dead);
+      }
+
+      // 地面/泳道（淡色）
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.05)';
+      ctx.fillRect(0, H*0.7, W, 4);
+      ctx.restore();
+
+      // 画实体
+      state.penguin.draw();
+      for (const p of state.pandas) p.draw();
+
+      // 状态提示
+      if (!state.running) {
+        // overlay 已处理
+      } else if (state.paused) {
+        ctx.save(); ctx.globalAlpha = 0.8; ctx.fillStyle = '#000'; ctx.font = 'bold 32px system-ui'; ctx.textAlign='center';
+        ctx.fillText('已暂停（P 继续）', W/2, H/2);
+        ctx.restore();
+      }
+
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    // ====== 启动/重开 ======
+    startBtn.addEventListener('click', resetGame);
+
+  </script>
+</body>
+</html>
