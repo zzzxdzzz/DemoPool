@@ -1,6 +1,0 @@
-fastapi
-uvicorn[standard]
-akshare>=1.14.0
-pandas
-pydantic
-pytz
