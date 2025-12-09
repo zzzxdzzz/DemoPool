@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  /* --- PATH LUMA PURE THEME --- */
+  :root {
+    /* 100% 基于 Logo 的配色 */
+    --logo-navy: #0F2D4A;   /* 深蓝：Logo文字主色 */
+    --logo-teal: #008B99;   /* 青绿：Logo中小路颜色 */
+    --logo-gold: #F5A623;   /* 暖黄：Logo星星颜色 */
+    --logo-bg:   #F9F7F2;   /* 米白：Logo背景纸张色 */
+    --white:     #FFFFFF;
+  }
+
+  body {
+    /* 字体：使用最接近 Logo 的无衬线粗体风格 */
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background-color: var(--logo-bg); /* 米白底色 */
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: 98vh;
+    color: var(--logo-navy);
+  }
+
+  /* --- 顶部：极简纯色 --- */
+  .header {
+    background-color: var(--logo-navy);
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center; /* 居中显示 */
+    border-bottom: 4px solid var(--logo-teal); /* 底部加上那条“路”的颜色 */
+  }
+
+  .header h1 {
+    margin: 0;
+    color: var(--white);
+    font-size: 24px;
+    font-weight: 800; /* 特粗字体，模仿Logo */
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  
+  .header-star {
+    color: var(--logo-gold);
+    margin-bottom: 5px; /* 让星星稍微浮在文字上面一点 */
+    margin-right: 8px;
+    font-size: 24px;
+  }
+
+  /* --- 聊天区：干净无干扰 --- */
+  #chat-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .message {
+    max-width: 85%;
+    padding: 15px 20px;
+    border-radius: 4px; /* 直角圆角，更干练 */
+    line-height: 1.6;
+    font-size: 16px;
+  }
+
+  /* 机器人：白底黑字，左边带青色线条 */
+  .bot-message {
+    align-self: flex-start;
+    background-color: var(--white);
+    border: 1px solid #E0E0E0;
+    border-left: 5px solid var(--logo-teal); /* 呼应Logo里的路 */
+    color: #333;
+  }
+
+  /* 用户：深蓝底白字，完全对应Logo主色 */
+  .user-message {
+    align-self: flex-end;
+    background-color: var(--logo-navy);
+    color: var(--white);
+  }
+
+  /* --- 底部输入框 --- */
+  .input-wrapper {
+    background-color: var(--white);
+    padding: 20px;
+    border-top: 1px solid #E0E0E0;
+  }
+
+  .input-area {
+    max-width: 800px;
+    margin: 0 auto;
+    display: flex;
+    gap: 10px;
+  }
+
+  input[type="text"] {
+    flex: 1;
+    padding: 15px;
+    border: 2px solid #E0E0E0;
+    border-radius: 4px;
+    font-size: 16px;
+    outline: none;
+    background-color: var(--logo-bg);
+  }
+
+  input[type="text"]:focus {
+    border-color: var(--logo-navy);
+    background-color: var(--white);
+  }
+
+  button {
+    background-color: var(--logo-gold); /* 按钮用星星的黄色，最醒目 */
+    color: var(--logo-navy); /* 文字用深蓝，对比强烈 */
+    border: none;
+    padding: 0 30px;
+    border-radius: 4px;
+    font-weight: 800;
+    font-size: 16px;
+    cursor: pointer;
+    text-transform: uppercase;
+  }
+
+  button:hover {
+    background-color: #e0961f;
+  }
+  
+  button:disabled {
+    background-color: #ddd;
+    color: #999;
+    cursor: not-allowed;
+  }
+
+  .loading {
+    text-align: center;
+    color: var(--logo-teal);
+    font-size: 12px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    display: none;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <span class="header-star">★</span>
+    <h1>PATH LUMA</h1>
+  </div>
+
+  <div id="chat-container">
+    <div class="message bot-message">
+      <strong>Hi！</strong><br>
+      I’m Luma. If you’re feeling unsure about applying to college or uncertain about what major to choose in the future, I can help you sort things out. What grade are you in right now, and which subjects do you enjoy most?
+    </div>
+  </div>
+
+  <div class="input-wrapper">
+    <div class="loading" id="loading-indicator">LUMA is thinking...</div>
+    <div class="input-area">
+      <input type="text" id="user-input" placeholder="user input..." onkeypress="handleKeyPress(event)">
+      <button id="send-btn" onclick="sendMessage()">发送</button>
+    </div>
+  </div>
+
+<script>
+  // ★★★ 请务必填入你的 Google Apps Script URL ★★★
+  const SCRIPT_URL = '';
+
+  let chatHistory = []; 
+
+  async function sendMessage() {
+    const inputField = document.getElementById('user-input');
+    const sendBtn = document.getElementById('send-btn');
+    const loading = document.getElementById('loading-indicator');
+    const text = inputField.value.trim();
+
+    if (!text) return;
+
+    addMessage(text, 'user');
+    inputField.value = '';
+    inputField.disabled = true;
+    sendBtn.disabled = true;
+    loading.style.display = 'block';
+    
+    scrollToBottom();
+    chatHistory.push({ role: "user", text: text });
+
+    try {
+      const response = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ message: text, history: chatHistory.slice(-5) }) 
+      });
+
+      const data = await response.json();
+      addMessage(data.reply, 'bot');
+      chatHistory.push({ role: "model", text: data.reply });
+
+    } catch (error) {
+      addMessage("连接错误。", 'bot');
+      console.error(error);
+    } finally {
+      inputField.disabled = false;
+      sendBtn.disabled = false;
+      loading.style.display = 'none';
+      inputField.focus();
+      scrollToBottom();
+    }
+  }
+
+  function addMessage(text, sender) {
+    const container = document.getElementById('chat-container');
+    const div = document.createElement('div');
+    div.className = `message ${sender === 'user' ? 'user-message' : 'bot-message'}`;
+    
+    // 简单的加粗处理
+    let contentHtml = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    contentHtml = contentHtml.replace(/\n/g, '<br>');
+    
+    div.innerHTML = contentHtml;
+    container.appendChild(div);
+  }
+
+  function scrollToBottom() {
+    const container = document.getElementById('chat-container');
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function handleKeyPress(e) {
+    if (e.key === 'Enter') sendMessage();
+  }
+</script>
+
+</body>
+</html>
