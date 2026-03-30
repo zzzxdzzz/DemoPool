@@ -1,0 +1,8 @@
+# Drop your science PDFs and books here.
+# Supported formats: .pdf, .txt
+# Nested folders are supported.
+#
+# Examples:
+#   docs/papers/nature-2024.pdf
+#   docs/books/astrophysics-textbook.pdf
+#   docs/notes/cometary-research.txt
