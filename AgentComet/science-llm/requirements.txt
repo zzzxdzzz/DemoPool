@@ -1,0 +1,23 @@
+# ── RAG Pipeline ──────────────────────────────────────────────────────────
+llama-index>=0.10.0
+llama-index-vector-stores-chroma>=0.1.0
+llama-index-embeddings-huggingface>=0.2.0
+llama-index-llms-ollama>=0.1.0
+chromadb>=0.5.0
+pypdf>=4.0.0
+pymupdf>=1.24.0
+sentence-transformers>=3.0.0
+
+# ── Fine-tuning (Apple Silicon / MLX) ────────────────────────────────────
+mlx-lm>=0.18.0
+datasets>=2.20.0
+huggingface_hub>=0.24.0
+transformers>=4.44.0
+accelerate>=0.33.0
+
+# ── Utilities ─────────────────────────────────────────────────────────────
+rich>=13.0.0
+click>=8.1.0
+python-dotenv>=1.0.0
+tqdm>=4.66.0
+numpy>=1.26.0
